@@ -1,5 +1,5 @@
 const paypal = require('@paypal/checkout-server-sdk');
-const Reservation = require('../models/Reservation'); 
+const Reservation = require('../models/Reservation');
 
 const clientId = process.env.PAYPAL_CLIENT_ID;
 const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
@@ -7,7 +7,6 @@ const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
 if (!clientId || !clientSecret) {
   console.error("PayPal credentials are missing. Please check your .env file.");
 }
-
 
 let environment;
 if (process.env.NODE_ENV === 'production') {
@@ -24,7 +23,6 @@ const createOrder = async (req, res) => {
     const { reservationId } = req.body;
     console.log('Received reservationId:', reservationId);
 
-    
     const reservation = await Reservation.findById(reservationId);
     if (!reservation) {
       return res.status(404).json({ message: 'Reservation not found' });
@@ -32,7 +30,6 @@ const createOrder = async (req, res) => {
 
     console.log('Fetched Reservation:', reservation);
 
-    
     const request = new paypal.orders.OrdersCreateRequest();
     request.prefer('return=representation');
     request.requestBody({
@@ -47,7 +44,6 @@ const createOrder = async (req, res) => {
       ],
     });
 
-    
     const order = await client.execute(request);
 
     console.log('PayPal Order Created:', order.result);
@@ -58,7 +54,6 @@ const createOrder = async (req, res) => {
   } catch (error) {
     console.error("PayPal Order Creation Error:", error.stack || error);
 
-    
     res.status(500).json({
       message: 'Error creating order',
       error: error.response ? error.response : error.message,
@@ -72,11 +67,9 @@ const captureOrder = async (req, res) => {
     const { orderId } = req.body;
     console.log('Received orderId for capture:', orderId);
 
-    
     const request = new paypal.orders.OrdersCaptureRequest(orderId);
     request.requestBody({});
 
-    
     const capture = await client.execute(request);
 
     console.log('PayPal Capture Response:', capture.result);
