@@ -1,6 +1,11 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+dotenv.config(); 
+
+console.log("PayPal Client ID:", process.env.PAYPAL_CLIENT_ID); 
+console.log("PayPal Client Secret:", process.env.PAYPAL_CLIENT_SECRET); 
+
 const connectDB = require("./config/db");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
@@ -8,19 +13,20 @@ const authRoutes = require("./routes/authRoutes");
 const restaurantRoutes = require("./routes/restaurantItemRoutes");
 const reservationRoutes = require("./routes/reservationRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
-const paymentRoutes = require("./routes/paymentRoutes");
+const paymentRoutes = require("./routes/paymentRoutes");  
 
 dotenv.config();
 connectDB();
 
 const app = express();
 
-
 app.use(express.json());
-app.use(cors({
-  origin: process.env.CLIENT_URL,
-  credentials: true, 
-}));
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL,
+    credentials: true,
+  })
+);
 
 app.use(
   session({
@@ -29,8 +35,8 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production", 
-      maxAge: 24 * 60 * 60 * 1000, 
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 24 * 60 * 60 * 1000,
     },
     store: MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
   })
@@ -41,7 +47,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/restaurant-items", restaurantRoutes);
 app.use("/api/reservations", reservationRoutes);
 app.use("/api/reviews", reviewRoutes);
-app.use("/api/payments", paymentRoutes);
+app.use("/api/payments", paymentRoutes);  
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

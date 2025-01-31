@@ -1,86 +1,103 @@
-const paypal = require('@paypal/checkout-server-sdk');
-const Reservation = require('../models/Reservation');
+const paypal = require("paypal-rest-sdk");
+const Reservation = require("../models/Reservation");
 
-const clientId = process.env.PAYPAL_CLIENT_ID;
-const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+paypal.configure({
+  mode: 'sandbox', // Ensure you're using the correct mode
+  client_id: process.env.PAYPAL_CLIENT_ID,
+  client_secret: process.env.PAYPAL_CLIENT_SECRET,
+});
 
-if (!clientId || !clientSecret) {
-  console.error("PayPal credentials are missing. Please check your .env file.");
-}
+const createPayment = async (req, res) => {
+  const { reservationId } = req.body;
 
-let environment;
-if (process.env.NODE_ENV === 'production') {
-  environment = new paypal.core.LiveEnvironment(clientId, clientSecret);
-} else {
-  environment = new paypal.core.SandboxEnvironment(clientId, clientSecret);
-}
-
-const client = new paypal.core.PayPalHttpClient(environment);
-
-
-const createOrder = async (req, res) => {
   try {
-    const { reservationId } = req.body;
-    console.log('Received reservationId:', reservationId);
-
     const reservation = await Reservation.findById(reservationId);
     if (!reservation) {
-      return res.status(404).json({ message: 'Reservation not found' });
+      return res.status(404).json({ message: "Reservation not found" });
     }
 
-    console.log('Fetched Reservation:', reservation);
+    const paymentAmount = reservation.amount;
 
-    const request = new paypal.orders.OrdersCreateRequest();
-    request.prefer('return=representation');
-    request.requestBody({
-      intent: 'CAPTURE',
-      purchase_units: [
+    const paymentJson = {
+      intent: "sale",
+      payer: {
+        payment_method: "paypal",
+      },
+      redirect_urls: {
+        return_url: `${process.env.CLIENT_URL}/api/payments/payment/success`,  // Updated to include /api/payments
+        cancel_url: `${process.env.CLIENT_URL}/api/payments/payment/cancel`,    // Updated to include /api/payments
+      },
+      transactions: [
         {
           amount: {
-            currency_code: 'USD',
-            value: reservation.amount.toFixed(2),
+            total: paymentAmount.toFixed(2),
+            currency: "USD",
           },
+          description: `Payment for reservation ${reservationId}`,
         },
       ],
+    };
+
+    const payment = await new Promise((resolve, reject) => {
+      paypal.payment.create(paymentJson, (error, payment) => {
+        if (error) {
+          console.error("Error creating PayPal payment:", error);
+          reject(error);
+        } else {
+          resolve(payment);
+        }
+      });
     });
 
-    const order = await client.execute(request);
+    const approvalUrl = payment.links.find(
+      (link) => link.rel === "approval_url"
+    ).href;
 
-    console.log('PayPal Order Created:', order.result);
-    return res.status(201).json({
-      message: 'Order created successfully',
-      orderId: order.result.id,
-    });
+    res.status(200).json({ approvalUrl });
   } catch (error) {
-    console.error("PayPal Order Creation Error:", error.stack || error);
-
-    res.status(500).json({
-      message: 'Error creating order',
-      error: error.response ? error.response : error.message,
-    });
+    console.error("Error creating PayPal payment:", error);
+    res.status(500).json({ message: "Error creating PayPal payment", error: error.message });
   }
 };
 
+const executePayment = async (req, res) => {
+  const { paymentId, payerId, reservationId } = req.body;
 
-const captureOrder = async (req, res) => {
   try {
-    const { orderId } = req.body;
-    console.log('Received orderId for capture:', orderId);
+    const reservation = await Reservation.findById(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ message: "Reservation not found" });
+    }
 
-    const request = new paypal.orders.OrdersCaptureRequest(orderId);
-    request.requestBody({});
+    if (reservation.paymentStatus === "paid") {
+      return res.status(400).json({
+        message: "Payment has already been processed for this reservation.",
+      });
+    }
 
-    const capture = await client.execute(request);
+    const executePaymentJson = {
+      payer_id: payerId,
+    };
 
-    console.log('PayPal Capture Response:', capture.result);
-    res.status(200).json({
-      message: 'Payment captured successfully',
-      capture,
+    const payment = await new Promise((resolve, reject) => {
+      paypal.payment.execute(paymentId, executePaymentJson, (error, payment) => {
+        if (error) {
+          console.error("Error executing PayPal payment:", error);
+          reject(error);
+        } else {
+          resolve(payment);
+        }
+      });
     });
+
+    reservation.paymentStatus = "paid";
+    await reservation.save();
+
+    res.status(200).json({ message: "Payment successful", payment });
   } catch (error) {
-    console.error("PayPal Capture Order Error:", error.stack || error);
-    res.status(500).json({ message: 'Error capturing order', error });
+    console.error("Error executing PayPal payment:", error);
+    res.status(500).json({ message: "Error executing payment", error: error.message });
   }
 };
 
-module.exports = { createOrder, captureOrder };
+module.exports = { createPayment, executePayment };

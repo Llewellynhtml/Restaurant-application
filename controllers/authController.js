@@ -65,7 +65,7 @@ const forgetPassword = async (req, res) => {
     
     const resetToken = crypto.randomBytes(32).toString("hex");
     user.resetPasswordToken = resetToken;
-    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour expiration time
+    user.resetPasswordExpires = Date.now() + 3600000; 
     await user.save();
 
     
